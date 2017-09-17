@@ -35,19 +35,17 @@ void printBoard(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], bool pretty)
 }
 
 static bool PRINT_DEBUG = false;
-static bool USE_TRANSPOSE_SOLVING = false;
 
 int main(int argc, char* argv[])
 {
-  char* board_str;
+  const char* board_str;
   if (argc == 2) {
     board_str = argv[1];
   } else if (argc == 3 && argv[1][0] == '-') {
     board_str = argv[2];
-    for (char* o = &argv[1][1]; *o != '\0'; ++o) {
+    for (const char* o = &argv[1][1]; *o != '\0'; ++o) {
       switch (*o) {
         case 'd': PRINT_DEBUG = true; break;
-        case 't': USE_TRANSPOSE_SOLVING = true; break;
         default: printf("Unknown opt '%c'.\n", *o); return 1;
       }
     }
@@ -64,7 +62,7 @@ int main(int argc, char* argv[])
 	printf("Invalid board char '%c'.\n", c);
 	return 1;
       }
-      const uint16_t v = c - '0';
+      const uint8_t v = c - '0';
       if (v > BOARD_SIZE) {
 	printf("Invalid board value '%i' from char '%c'.\n", v, c);
 	return 1;
@@ -90,7 +88,6 @@ int main(int argc, char* argv[])
 	}
 	solveByCells(cells);
 
-	if (!USE_TRANSPOSE_SOLVING) continue;
 	if (PRINT_DEBUG) {
 	  printBoard(board, false);
 	  printf("Possibilites: %s %zd\n",
