@@ -14,9 +14,12 @@ $ cd sudoku
 $ gcc -std=c11 -Wall -o sudoku sudoku.c
 ```
 
-By default the executable is built to solve 9x9 boards (SQUARE_SIDE == 3). But
-this may be changed by modifying the value of SQUARE_SIDE near the top of the
-source file.
+By default the executable is built to solve 9x9 boards (SQUARE_SIDE = 3). But
+this may be changed by adding the custom definition of `CUSTOM_SQUARE_SIDE`:
+
+```
+$ gcc -std=c11 -Wall -DCUSTOM_SQUARE_SIDE=2 -o sudoku sudoku.c
+```
 
 ### Run
 

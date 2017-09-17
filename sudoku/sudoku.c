@@ -4,8 +4,13 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define SQUARE_SIDE ((size_t) 3)
-#define BOARD_SIZE ((size_t) SQUARE_SIDE * SQUARE_SIDE)
+#ifdef CUSTOM_SQUARE_SIDE
+# define SQUARE_SIDE ((size_t) (CUSTOM_SQUARE_SIDE))
+#else
+# define SQUARE_SIDE ((size_t) 3)
+#endif
+
+#define BOARD_SIZE ((size_t) (SQUARE_SIDE * SQUARE_SIDE))
 
 typedef uint16_t Cell;
 static_assert(sizeof(Cell) * 8 >= BOARD_SIZE, "Cell width not big enough!");
