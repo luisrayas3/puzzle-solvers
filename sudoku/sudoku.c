@@ -31,8 +31,16 @@ int bitNum(Cell c) { for (int i = 0; ; ++i) if ((1 << (i - 1)) >= c) return i; }
 void printBoard(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], bool pretty)
 {
   for (size_t i = 0; i < BOARD_SIZE; ++i) {
+    if (i > 0 && i % SQUARE_SIDE == 0) {
+      for (size_t j = 0; j < BOARD_SIZE; ++j) {
+	if (j > 0 && j % SQUARE_SIDE == 0) printf("+-");
+	printf("--");
+      }
+      printf("\n");
+    }
     for (size_t j = 0; j < BOARD_SIZE; ++j) {
-      printf("%i, ", pretty ? bitNum(board[i][j]) : board[i][j]);
+      if (j > 0 && j % SQUARE_SIDE == 0) printf("| ");
+      printf("%i ", pretty ? bitNum(board[i][j]) : board[i][j]);
     }
     printf("\n");
   }
