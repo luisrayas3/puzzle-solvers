@@ -18,16 +18,16 @@ static_assert(sizeof(Cell) * 8 >= BOARD_SIZE, "Cell width not big enough!");
 static const Cell UNKNOWN = (1 << BOARD_SIZE) - 1;
 
 bool stop(Cell board[/*BOARD_SIZE*/][BOARD_SIZE]);
-bool isValid(Cell board[/*BOARD_SIZE*/][BOARD_SIZE]);
+bool isComplete(Cell board[/*BOARD_SIZE*/][BOARD_SIZE]);
 
 void column(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], size_t c, Cell* set[/*BOARD_SIZE*/]);
 void row(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], size_t r, Cell* set[/*BOARD_SIZE*/]);
 void block(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], size_t b, Cell* set[/*BOARD_SIZE*/]);
 
-void solveByCells(Cell* cells[/*BOARD_SIZE*/]);
-void solveByPossibilities(Cell* cells[/*BOARD_SIZE*/]);
+bool solveByCells(Cell* cells[/*BOARD_SIZE*/]);
+bool solveByPossibilities(Cell* cells[/*BOARD_SIZE*/]);
 
-int bitNum(Cell c) { for (int i = 0; ; ++i) if ((1 << (i - 1)) >= c) return i; }
+int bitNum(Cell c) { for (int i = 0; ; ++i) if (1 << (i - 1) >= c) return i; }
 void printBoard(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], bool pretty)
 {
   for (size_t i = 0; i < BOARD_SIZE; ++i) {
@@ -84,37 +84,41 @@ int main(int argc, char* argv[])
     }
   }
 
-  typedef void (*SetGetter)(Cell /*board*/[][BOARD_SIZE], size_t /*idx*/, Cell* /*res*/[]);
-  SetGetter set_getters[] = {column, row, block, NULL};
+  typedef void (*GroupGetter)(Cell /*board*/[][BOARD_SIZE], size_t /*idx*/, Cell* /*res*/[]);
+  GroupGetter groupers[] = {column, row, block, NULL};
 
   int num_iters = 0;
+  bool valid = false;
   while (!stop(board)) {
+    ++num_iters;
     Cell* cells[BOARD_SIZE];
-    for (SetGetter* getSet = &set_getters[0]; *getSet != NULL; ++getSet) {
-      for (size_t set_i = 0; set_i < BOARD_SIZE; ++set_i) {
-	(*getSet)(board, set_i, cells);
+    for (GroupGetter* groupCells = &groupers[0]; *groupCells != NULL; ++groupCells) {
+      for (size_t group_i = 0; group_i < BOARD_SIZE; ++group_i) {
+	(*groupCells)(board, group_i, cells);
 
 	if (PRINT_DEBUG) {
 	  printBoard(board, false);
 	  printf("Cells: %s %zd\n",
-		 *getSet == column ? "Col" : *getSet == row ? "Row" : "Block", set_i + 1);
+		 *groupCells == column ? "Col" : *groupCells == row ? "Row" : "Block", group_i + 1);
 	}
-	solveByCells(cells);
+	if (!solveByCells(cells)) goto invalid_soln_l;
 
 	if (PRINT_DEBUG) {
 	  printBoard(board, false);
 	  printf("Possibilites: %s %zd\n",
-		 *getSet == column ? "Col" : *getSet == row ? "Row" : "Block", set_i + 1);
+		 *groupCells == column ? "Col" : *groupCells == row ? "Row" : "Block", group_i + 1);
 	}
-	solveByPossibilities(cells);
+	if (!solveByPossibilities(cells)) goto invalid_soln_l;
       }
     }
-    ++num_iters;
   }
+  valid = true;
+ invalid_soln_l:;
 
-  const bool valid = isValid(board);
-  printf("%s result found! Took %i iterations.\n", valid ? "Valid" : "Invalid", num_iters);
-  printBoard(board, valid);
+  const bool complete = isComplete(board);
+  printf("%s, %s result found! Took %i iterations.\n",
+	 complete ? "Complete" : "Incomplete", valid ? "valid" : "invalid", num_iters);
+  printBoard(board, complete);
 }
 
 void column(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], size_t c, Cell* set[/*BOARD_SIZE*/])
@@ -133,7 +137,7 @@ void block(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], size_t b, Cell* set[/*BOARD_S
   for (size_t i = 0; i < BOARD_SIZE; ++i) set[i] = &board[b / s * s + i / s][b % s * s + i % s];
 }
 
-int countBits(uint16_t val);
+int countBits(Cell val);
 
 bool stop(Cell board[/*BOARD_SIZE*/][BOARD_SIZE])
 {
@@ -141,7 +145,7 @@ bool stop(Cell board[/*BOARD_SIZE*/][BOARD_SIZE])
   bool res = true;
   for (size_t i = 0; i < BOARD_SIZE; ++i) {
     for (size_t j = 0; j < BOARD_SIZE; ++j) {
-      if (prev_board[i][j] != board[i][j] && countBits(board[i][j]) != 1) {
+      if (prev_board[i][j] != board[i][j]) {
 	res = false;
 	prev_board[i][j] = board[i][j];
       }
@@ -150,7 +154,7 @@ bool stop(Cell board[/*BOARD_SIZE*/][BOARD_SIZE])
   return res;
 }
 
-bool isValid(Cell board[/*BOARD_SIZE*/][BOARD_SIZE])
+bool isComplete(Cell board[/*BOARD_SIZE*/][BOARD_SIZE])
 {
   for (size_t i = 0; i < BOARD_SIZE; ++i) {
     for (size_t j = 0; j < BOARD_SIZE; ++j) {
@@ -162,41 +166,46 @@ bool isValid(Cell board[/*BOARD_SIZE*/][BOARD_SIZE])
   return true;
 }
 
-void solveByCells(Cell* cells[/*BOARD_SIZE*/])
+bool solveByCells(Cell* cells[/*BOARD_SIZE*/])
 {
   for (size_t i = 0; i < BOARD_SIZE; ++i) {
-    bool subsets[BOARD_SIZE] = { false };
+    Cell mask = 0;
     int num_subsets = 0;
 
-    const uint16_t vals = *cells[i];
+    const Cell vals = *cells[i];
     for (size_t j = i; j < BOARD_SIZE; ++j) {
       if ((*cells[j] | vals) == vals) {
-	subsets[j] = true;
+	mask |= 1 << j;
 	++num_subsets;
       }
     }
 
-    if (countBits(vals) == num_subsets) {
+    const int num_vals = countBits(vals);
+    if (num_vals == num_subsets) {
       bool changed = false;
       for (size_t j = 0; j < BOARD_SIZE; ++j) {
 	const Cell old = *cells[j];
-	*cells[j] &= subsets[j] ? vals : ~vals & UNKNOWN;
+	*cells[j] &= ((1 << j) & mask) ? vals : ~vals & UNKNOWN;
 	if (*cells[j] != old) changed = true;
       }
-      if (PRINT_DEBUG && changed) printf("Set of %i cells fulfilling %i.\n", num_subsets, vals);
+      if (PRINT_DEBUG && changed) printf("Set %i of cells fulfilling %i.\n", mask, vals);
+    } else if (num_vals < num_subsets) {
+      if (PRINT_DEBUG) printf("Set %i of cells overfulfill %i!\n", mask, vals);
+      return false;
     }
   }
+  return true;
 }
 
-uint16_t transposeBits(Cell* const cells[], size_t bit_i);
+Cell transposeBits(Cell* const cells[/*BOARD_SIZE*/], size_t bit_i);
 
-void solveByPossibilities(Cell* cells[/*BOARD_SIZE*/])
+bool solveByPossibilities(Cell* cells[/*BOARD_SIZE*/])
 {
   for (size_t i = 0; i < BOARD_SIZE; ++i) {
-    uint16_t mask = 0;
+    Cell mask = 0;
     int num_subsets = 0;
 
-    const uint16_t vals = transposeBits(cells, i);
+    const Cell vals = transposeBits(cells, i);
     for (size_t j = i; j < BOARD_SIZE; ++j) {
       if ((transposeBits(cells, j) | vals) == vals) {
 	mask |= 1 << j;
@@ -204,28 +213,33 @@ void solveByPossibilities(Cell* cells[/*BOARD_SIZE*/])
       }
     }
 
-    if (countBits(vals) == num_subsets) {
+    const int num_vals = countBits(vals);
+    if (num_vals == num_subsets) {
       bool changed = false;
       for (size_t j = 0; j < BOARD_SIZE; ++j) {
 	const Cell old = *cells[j];
         *cells[j] &= ((1 << j) & vals) ? mask : ~mask & UNKNOWN;
 	if (*cells[j] != old) changed = true;
       }
-      if (PRINT_DEBUG && changed) printf("Set of %i possibilities fulfilled by %i.\n", num_subsets, mask);
+      if (PRINT_DEBUG && changed) printf("Set %i of possibilities fulfilled by %i.\n", vals, mask);
+    } else if (num_vals < num_subsets) {
+      if (PRINT_DEBUG) printf("Set %i of possibilities cannot be fulfilled by %i!\n", vals, mask);
+      return false;
     }
   }
+  return true;
 }
 
-int countBits(uint16_t val)
+int countBits(Cell val)
 {
   int res = 0;
   for (size_t i = 0; i < BOARD_SIZE; ++i) if (val & (1 << i)) ++res;
   return res;
 }
 
-uint16_t transposeBits(Cell* const cells[], size_t bit_i)
+Cell transposeBits(Cell* const cells[/*BOARD_SIZE*/], size_t bit_i)
 {
-  uint16_t res = 0;
+  Cell res = 0;
   for (size_t i = 0; i < BOARD_SIZE; ++i) if (*cells[i] & (1 << bit_i)) res |= 1 << i;
   return res;
 }
