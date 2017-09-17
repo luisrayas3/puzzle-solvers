@@ -10,11 +10,8 @@ $ cd sudoku
 
 ### Build
 
-You can compile C++ or C:
-
 ```
-$ gcc -std=C11 -Wall -o sudoku sudoku.c
-$ g++ --std=C++14 -Wall -o sudoku sudoku.cc
+$ gcc -std=c11 -Wall -o sudoku sudoku.c
 ```
 
 By default the executable is built to solve 9x9 boards (SQUARE_SIDE == 3). But
