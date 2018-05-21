@@ -17,15 +17,14 @@ static_assert(sizeof(Cell) * 8 > BOARD_SIZE, "Cell width not big enough!");
 
 static const Cell UNKNOWN = (1 << BOARD_SIZE) - 1;
 
-void copyBoard(const Cell src[/*BOARD_SIZE*/][BOARD_SIZE], Cell dest[/*BOARD_SIZE*/][BOARD_SIZE]);
-bool changed(const Cell src[/*BOARD_SIZE*/][BOARD_SIZE], Cell dest[/*BOARD_SIZE*/][BOARD_SIZE]);
 bool isComplete(const Cell board[/*BOARD_SIZE*/][BOARD_SIZE]);
+bool isDifferent(const Cell lhs[/*BOARD_SIZE*/][BOARD_SIZE], const Cell rhs[/*BOARD_SIZE*/][BOARD_SIZE]);
+bool isChanged(const Cell src[/*BOARD_SIZE*/][BOARD_SIZE], Cell dest[/*BOARD_SIZE*/][BOARD_SIZE]);
+void copyBoard(const Cell src[/*BOARD_SIZE*/][BOARD_SIZE], Cell dest[/*BOARD_SIZE*/][BOARD_SIZE]);
+void accumulate(const Cell src[/*BOARD_SIZE*/][BOARD_SIZE], Cell dest[/*BOARD_SIZE*/][BOARD_SIZE]);
 
-void column(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], size_t c, Cell* set[/*BOARD_SIZE*/]);
-void row(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], size_t r, Cell* set[/*BOARD_SIZE*/]);
-void block(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], size_t b, Cell* set[/*BOARD_SIZE*/]);
-
-bool solveNaked(Cell board[/*BOARD_SIZE*/][BOARD_SIZE]);
+typedef struct LinkedCell { struct LinkedCell* prev; size_t row; size_t col; } LinkedCell;
+bool solveAtDepth(int depth, LinkedCell* prev, Cell board[/*BOARD_SIZE*/][BOARD_SIZE]);
 
 int bitNum(Cell c) { for (int i = 0; ; ++i) if (1 << (i - 1) >= c) return i; }
 void printBoard(const Cell board[/*BOARD_SIZE*/][BOARD_SIZE], bool pretty)
@@ -86,35 +85,79 @@ int main(int argc, char* argv[])
     }
   }
 
-  bool valid, complete;
   Cell prev_board[BOARD_SIZE][BOARD_SIZE] = { { 0 } };
-  while ((valid = solveNaked(board)) && !(complete = isComplete(board)) && changed(board, prev_board)) {
-    for (size_t i = 0; i < BOARD_SIZE; ++i) {
-      for (size_t j = 0; j < BOARD_SIZE; ++j) {
-	Cell accum[BOARD_SIZE][BOARD_SIZE] = { { 0 } };
-	for (Cell c = 1; c < UNKNOWN; c <<= 1) {
-	  Cell guess[BOARD_SIZE][BOARD_SIZE];
-	  copyBoard(board, guess);
-	  guess[i][j] &= c;
-	  if (guess[i][j] == 0) continue;
-	  if (solveNaked(guess)) {
-	    for (size_t i = 0; i < BOARD_SIZE; ++i) {
-	      for (size_t j = 0; j < BOARD_SIZE; ++j) {
-		accum[i][j] |= guess[i][j];
-	      }
-	    }
-	  }
-	}
-	if (changed(accum, board)) goto break_outer_l;
-      }
+  bool valid = false, complete = false;
+  int max_depth = 0;
+  while (isChanged(board, prev_board)) {
+    for (int depth = 0; depth <= BOARD_SIZE * BOARD_SIZE; ++depth) {
+      if (depth > max_depth) max_depth = depth;
+      /*if (PRINT_DEBUG)*/ printf("Solving @ depth %i.\n", depth);
+
+      valid = solveAtDepth(depth, NULL, board);
+      if (!valid || isDifferent(board, prev_board)) break;
     }
-  break_outer_l:;
+    complete = isComplete(board);
+    if (!valid || complete) break;
   }
 
-  printf("%s, %s result found! Took %i iterations.\n",
-	 valid ? "Valid" : "Invalid", complete ? "Complete" : "Incomplete", num_iters);
+  printf("%s, %s result found! Took %i iterations, max search depth %i.\n",
+	 valid ? "Valid" : "Invalid", complete ? "Complete" : "Incomplete", num_iters, max_depth);
   printBoard(board, complete);
 }
+
+int countBits(Cell val);
+
+bool guessPossibilities(LinkedCell* guessable, Cell board[/*BOARD_SIZE*/][BOARD_SIZE],
+			Cell accum[/*BOARD_SIZE*/][BOARD_SIZE]);
+
+
+bool solveAtDepth(int depth, LinkedCell* prev, Cell board[/*BOARD_SIZE*/][BOARD_SIZE])
+{
+  if (depth == 0) {
+    Cell accum[BOARD_SIZE][BOARD_SIZE] = { { 0 } };
+    if (!guessPossibilities(prev, board, accum)) return false;
+    if (/*PRINT_DEBUG && */isChanged(accum, board)) printf("Made progress!\n");
+    return true;
+  }
+  const bool has_prev = prev != NULL;
+  for (size_t i = has_prev ? prev->row : 0; i < BOARD_SIZE; ++i) {
+    for (size_t j = has_prev ? prev->col : 0; j < BOARD_SIZE; ++j) {
+      if (has_prev && i == prev->row && j == prev->col) continue;
+      if (countBits(board[i][j] <= 1)) continue;
+      LinkedCell cell = { .prev = prev, .row = i, .col = j };
+      if (!solveAtDepth(depth - 1, &cell, board)) return false;
+    }
+  }
+  return true;
+}
+
+bool solveNaked(Cell board[/*BOARD_SIZE*/][BOARD_SIZE]);
+
+bool guessPossibilities(LinkedCell* guessable, Cell board[/*BOARD_SIZE*/][BOARD_SIZE],
+			Cell accum[/*BOARD_SIZE*/][BOARD_SIZE])
+{
+  if (guessable == NULL) {
+    Cell guess[BOARD_SIZE][BOARD_SIZE];
+    copyBoard(board, guess);
+    bool valid = solveNaked(guess);
+    if (valid) accumulate(guess, accum);
+    return valid;
+  }
+  bool any_valid = false;
+  Cell* cell = &board[guessable->row][guessable->col];
+  const Cell orig = *cell;
+  for (Cell c = 1; c <= UNKNOWN; c <<= 1) {
+    if (!(c & orig)) continue;
+    *cell = c;
+    if (guessPossibilities(guessable->prev, board, accum)) any_valid = true;
+  }
+  *cell = orig;
+  return any_valid;
+}
+
+void column(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], size_t c, Cell* set[/*BOARD_SIZE*/]);
+void row(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], size_t r, Cell* set[/*BOARD_SIZE*/]);
+void block(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], size_t b, Cell* set[/*BOARD_SIZE*/]);
 
 bool solveByCells(Cell* cells[/*BOARD_SIZE*/]);
 bool solveByPossibilities(Cell* cells[/*BOARD_SIZE*/]);
@@ -125,7 +168,7 @@ bool solveNaked(Cell board[/*BOARD_SIZE*/][BOARD_SIZE])
   GroupGetter groupers[] = {column, row, block, NULL};
 
   Cell prev_board[BOARD_SIZE][BOARD_SIZE] = { { 0 } };
-  while (changed(board, prev_board)) {
+  while (isChanged(board, prev_board)) {
     ++num_iters;
     Cell* cells[BOARD_SIZE];
     for (GroupGetter* groupCells = &groupers[0]; *groupCells != NULL; ++groupCells) {
@@ -151,12 +194,29 @@ bool solveNaked(Cell board[/*BOARD_SIZE*/][BOARD_SIZE])
   return true;
 }
 
-void copyBoard(const Cell src[/*BOARD_SIZE*/][BOARD_SIZE], Cell dest[/*BOARD_SIZE*/][BOARD_SIZE])
+bool isComplete(const Cell board[/*BOARD_SIZE*/][BOARD_SIZE])
 {
-  changed(src, dest);
+  for (size_t i = 0; i < BOARD_SIZE; ++i) {
+    for (size_t j = 0; j < BOARD_SIZE; ++j) {
+      if (countBits(board[i][j]) != 1) {
+	return false;
+      }
+    }
+  }
+  return true;
 }
 
-bool changed(const Cell src[/*BOARD_SIZE*/][BOARD_SIZE], Cell dest[/*BOARD_SIZE*/][BOARD_SIZE])
+bool isDifferent(const Cell lhs[/*BOARD_SIZE*/][BOARD_SIZE], const Cell rhs[/*BOARD_SIZE*/][BOARD_SIZE])
+{
+  for (size_t i = 0; i < BOARD_SIZE; ++i) {
+    for (size_t j = 0; j < BOARD_SIZE; ++j) {
+      if (lhs[i][j] != rhs[i][j]) return true;
+    }
+  }
+  return false;
+}
+
+bool isChanged(const Cell src[/*BOARD_SIZE*/][BOARD_SIZE], Cell dest[/*BOARD_SIZE*/][BOARD_SIZE])
 {
   bool res = false;
   for (size_t i = 0; i < BOARD_SIZE; ++i) {
@@ -170,18 +230,18 @@ bool changed(const Cell src[/*BOARD_SIZE*/][BOARD_SIZE], Cell dest[/*BOARD_SIZE*
   return res;
 }
 
-int countBits(Cell val);
+void copyBoard(const Cell src[/*BOARD_SIZE*/][BOARD_SIZE], Cell dest[/*BOARD_SIZE*/][BOARD_SIZE])
+{
+  isChanged(src, dest);
+}
 
-bool isComplete(const Cell board[/*BOARD_SIZE*/][BOARD_SIZE])
+void accumulate(const Cell src[/*BOARD_SIZE*/][BOARD_SIZE], Cell dest[/*BOARD_SIZE*/][BOARD_SIZE])
 {
   for (size_t i = 0; i < BOARD_SIZE; ++i) {
     for (size_t j = 0; j < BOARD_SIZE; ++j) {
-      if (countBits(board[i][j]) != 1) {
-	return false;
-      }
+      dest[i][j] |= src[i][j];
     }
   }
-  return true;
 }
 
 void column(Cell board[/*BOARD_SIZE*/][BOARD_SIZE], size_t c, Cell* set[/*BOARD_SIZE*/])
