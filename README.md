@@ -1,5 +1,7 @@
 # Puzzle Solvers
 
+[![version](https://img.shields.io/github/v/tag/luisrayas3/puzzle-solvers?sort=semver)](https://github.com/luisrayas3/puzzle-solvers/releases)
+
 Algorithms for solving puzzles. Just for fun.
 
 ## Sudoku
